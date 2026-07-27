@@ -13,7 +13,7 @@ written.
 
 - Neovim >= 0.9
 - `python3` on `$PATH` (stdlib only — no extra Python packages needed)
-- [csvview.nvim](https://github.com/hat-org/csvview.nvim) (optional) — if
+- [csvview.nvim](https://github.com/hat0uma/csvview.nvim) (optional) — if
   installed, lens buffers are rendered with aligned/bordered columns
 
 ## Installation ([lazy.nvim](https://github.com/folke/lazy.nvim))
@@ -22,6 +22,9 @@ written.
 {
   'antonio-decaro/csvlens',
   cmd = { 'CsvLens', 'CsvWhere', 'CsvSortBy', 'CsvGroupBy', 'CsvAgg', 'CsvCols', 'CsvLimit', 'CsvOps', 'CsvReset' },
+  dependencies = {
+    'hat0uma/csvview.nvim', -- optional, for aligned/bordered column rendering
+  },
   opts = {
     -- python = 'python3',
     -- limit = 500,
