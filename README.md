@@ -53,6 +53,8 @@ soon as it's required, so a bare `{ 'antonio-decaro/csvlens' }` works too.
 :CsvSortBy exec_ns:desc,step
 :CsvGroupBy cores            aggregate (see :CsvAgg for available functions)
 :CsvAgg exec_ns:mean,exec_ns:p95
+                              (functions: count, sum, mean, median, min, max,
+                              p50, p95, p99, stdev, outliers)
 :CsvCols step,core,exec_ns
 :CsvLimit 200
 :CsvOps                      show the active pipeline
@@ -63,6 +65,10 @@ soon as it's required, so a bare `{ 'antonio-decaro/csvlens' }` works too.
 Each command replaces that one stage of the pipeline and re-runs the query
 against the original file, so operations can be layered and revised in any
 order.
+
+`outliers` flags values more than 1.5*IQR outside a group's quartiles (Tukey's
+fences) and lists them pipe-separated in the cell, e.g. `exec_ns:outliers`
+next to `exec_ns:mean` shows which rows pulled a group's average off.
 
 ## Shell
 

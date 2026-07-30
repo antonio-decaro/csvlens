@@ -197,7 +197,8 @@ local OP_ALIASES = {
 }
 
 -- Mirrors AGGS in scripts/csvlens.py -- keep in sync.
-local AGG_FUNCS = { 'count', 'sum', 'mean', 'median', 'min', 'max', 'p50', 'p95', 'p99', 'stdev' }
+local AGG_FUNCS =
+  { 'count', 'sum', 'mean', 'median', 'min', 'max', 'p50', 'p95', 'p99', 'stdev', 'outliers' }
 
 local SHELL_HELP = {
   "csvlens shell -- one command per line, 'help' for this message",

@@ -52,6 +52,29 @@ def percentile(values, q):
     return xs[lo] + (xs[hi] - xs[lo]) * (pos - lo)
 
 
+# Set from --precision right before a group/agg pass; outliers formats each
+# value it lists the same way the top-level CSV writer would, since it's
+# embedding numbers inside a single cell rather than a cell of its own.
+PRECISION = 3
+
+
+def format_num(v):
+    if isinstance(v, float):
+        s = f"{v:.{PRECISION}f}".rstrip("0").rstrip(".")
+        return s if s else "0"
+    return str(v)
+
+
+def outliers(xs):
+    """Tukey's fences: values more than 1.5*IQR outside the quartiles."""
+    if len(xs) < 4:
+        return ""
+    q1, q3 = percentile(xs, 0.25), percentile(xs, 0.75)
+    iqr = q3 - q1
+    lo, hi = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+    return "|".join(format_num(v) for v in sorted(v for v in xs if v < lo or v > hi))
+
+
 AGGS = {
     "count": len,
     "sum": sum,
@@ -63,6 +86,7 @@ AGGS = {
     "p95": lambda xs: percentile(xs, 0.95),
     "p99": lambda xs: percentile(xs, 0.99),
     "stdev": lambda xs: statistics.stdev(xs) if len(xs) > 1 else 0.0,
+    "outliers": outliers,
 }
 
 
@@ -148,6 +172,9 @@ def main():
     p.add_argument("--limit", type=int)
     p.add_argument("--precision", type=int, default=3)
     a = p.parse_args()
+
+    global PRECISION
+    PRECISION = a.precision
 
     fields, rows = load(a.file)
 
