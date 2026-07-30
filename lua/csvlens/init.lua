@@ -149,13 +149,33 @@ local function create_commands()
 
   vim.api.nvim_create_user_command('CsvLens', function(o)
     M.open(o.args)
-  end, { nargs = '?', complete = 'file', desc = 'Open a read-only queryable CSV view' })
+  end, { nargs = '?', complete = 'file', desc = 'Open a read-only lens on [file] (defaults to the current buffer)' })
 
-  vim.api.nvim_create_user_command('CsvWhere', set_op 'where', { nargs = '*', desc = 'Filter lens rows' })
-  vim.api.nvim_create_user_command('CsvSortBy', set_op 'sort', { nargs = '*', desc = 'Sort lens rows' })
-  vim.api.nvim_create_user_command('CsvGroupBy', set_op 'group', { nargs = '*', desc = 'Group lens rows' })
-  vim.api.nvim_create_user_command('CsvAgg', set_op 'agg', { nargs = '*', desc = 'Aggregations for :CsvGroupBy' })
-  vim.api.nvim_create_user_command('CsvCols', set_op 'cols', { nargs = '*', desc = 'Project lens columns' })
+  vim.api.nvim_create_user_command(
+    'CsvWhere',
+    set_op 'where',
+    { nargs = '*', desc = 'Filter lens rows by a Python expression over column names, e.g. cores == 64 and exec_ns > 5000' }
+  )
+  vim.api.nvim_create_user_command(
+    'CsvSortBy',
+    set_op 'sort',
+    { nargs = '*', desc = 'Sort lens rows by col[:asc|desc], comma-separated; earlier keys take precedence' }
+  )
+  vim.api.nvim_create_user_command(
+    'CsvGroupBy',
+    set_op 'group',
+    { nargs = '*', desc = 'Group lens rows by one or more columns, comma-separated (aggregated per :CsvAgg)' }
+  )
+  vim.api.nvim_create_user_command(
+    'CsvAgg',
+    set_op 'agg',
+    { nargs = '*', desc = 'Aggregate col:func pairs for :CsvGroupBy, e.g. exec_ns:mean,exec_ns:p95' }
+  )
+  vim.api.nvim_create_user_command(
+    'CsvCols',
+    set_op 'cols',
+    { nargs = '*', desc = 'Show only these columns, comma-separated, in this order' }
+  )
 
   vim.api.nvim_create_user_command('CsvLimit', function(o)
     local buf = current_lens()
@@ -164,14 +184,14 @@ local function create_commands()
     end
     state[buf].ops.limit = tonumber(o.args)
     refresh(buf)
-  end, { nargs = 1, desc = 'Row cap for the lens' })
+  end, { nargs = 1, desc = 'Cap the number of rows shown in the lens' })
 
   vim.api.nvim_create_user_command('CsvOps', function()
     local buf = current_lens()
     if buf then
       vim.notify(vim.b[buf].csvlens_status or describe(state[buf]), vim.log.levels.INFO)
     end
-  end, { desc = 'Show the active lens pipeline' })
+  end, { desc = 'Show the active lens pipeline (where/group/agg/sort/cols/limit)' })
 
   vim.api.nvim_create_user_command('CsvReset', function()
     local buf = current_lens()
@@ -180,7 +200,7 @@ local function create_commands()
     end
     state[buf].ops = {}
     refresh(buf)
-  end, { desc = 'Clear all lens operations' })
+  end, { desc = 'Clear all lens operations and re-show the raw CSV' })
 end
 
 --- Called by lazy.nvim (via `opts = {}` or a `config` function). Optional --

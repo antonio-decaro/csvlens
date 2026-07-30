@@ -12,13 +12,23 @@ Stdlib only, on purpose: the apt pandas in /usr/lib/python3/dist-packages is
 built against numpy 1.x and blows up against the pip numpy 2.x in ~/.local,
 so anything importing pandas has to go through the venv. This doesn't.
 """
+
 import argparse
 import csv
 import statistics
 import sys
 
-SAFE = {"__builtins__": {}, "abs": abs, "min": min, "max": max, "len": len,
-        "round": round, "int": int, "float": float, "str": str}
+SAFE = {
+    "__builtins__": {},
+    "abs": abs,
+    "min": min,
+    "max": max,
+    "len": len,
+    "round": round,
+    "int": int,
+    "float": float,
+    "str": str,
+}
 
 
 def coerce(v):
@@ -59,7 +69,9 @@ AGGS = {
 def load(path):
     with open(path, newline="") as fh:
         reader = csv.DictReader(fh)
-        return reader.fieldnames or [], [{k: coerce(v) for k, v in row.items()} for row in reader]
+        return reader.fieldnames or [], [
+            {k: coerce(v) for k, v in row.items()} for row in reader
+        ]
 
 
 def apply_where(rows, expr):
@@ -80,14 +92,19 @@ def apply_sort(rows, spec):
     for key in reversed(spec.split(",")):
         name, _, direction = key.partition(":")
         name = name.strip()
-        rows.sort(key=lambda r: (r.get(name) is None, r.get(name)),
-                  reverse=direction.strip() in ("desc", "d", "r"))
+        rows.sort(
+            key=lambda r: (r.get(name) is None, r.get(name)),
+            reverse=direction.strip() in ("desc", "d", "r"),
+        )
     return rows
 
 
 def numeric_cols(fields, rows, exclude=()):
-    return [f for f in fields
-            if f not in exclude and any(isinstance(r.get(f), (int, float)) for r in rows)]
+    return [
+        f
+        for f in fields
+        if f not in exclude and any(isinstance(r.get(f), (int, float)) for r in rows)
+    ]
 
 
 def apply_group(fields, rows, group_spec, agg_spec):
@@ -150,12 +167,18 @@ def main():
             sys.exit(f"csvlens: no such column(s): {', '.join(missing)}")
         fields = want
     if a.limit:
-        rows = rows[:a.limit]
+        rows = rows[: a.limit]
 
     def fmt(v):
-        return f"{v:.{a.precision}f}".rstrip("0").rstrip(".") if isinstance(v, float) else v
+        return (
+            f"{v:.{a.precision}f}".rstrip("0").rstrip(".")
+            if isinstance(v, float)
+            else v
+        )
 
-    w = csv.DictWriter(sys.stdout, fieldnames=fields, extrasaction="ignore", lineterminator="\n")
+    w = csv.DictWriter(
+        sys.stdout, fieldnames=fields, extrasaction="ignore", lineterminator="\n"
+    )
     w.writeheader()
     for row in rows:
         w.writerow({k: fmt(row.get(k, "")) for k in fields})
