@@ -9,6 +9,11 @@ setup is required.
 pipeline and re-run the query. The source file is only ever read, never
 written.
 
+`:CsvLens` also opens `:CsvShell`, a small REPL below the lens where you type
+the same verbs one per line (`where cores == 64`, `agg exec_ns:mean`, ...)
+instead of separate ex-commands, with `<Tab>` completion and `<Up>`/`<Down>`
+history.
+
 ## Requirements
 
 - Neovim >= 0.9
@@ -21,7 +26,10 @@ written.
 ```lua
 {
   'antonio-decaro/csvlens',
-  cmd = { 'CsvLens', 'CsvWhere', 'CsvSortBy', 'CsvGroupBy', 'CsvAgg', 'CsvCols', 'CsvLimit', 'CsvOps', 'CsvReset' },
+  cmd = {
+    'CsvLens', 'CsvWhere', 'CsvSortBy', 'CsvGroupBy', 'CsvAgg', 'CsvCols',
+    'CsvLimit', 'CsvOps', 'CsvReset', 'CsvShell',
+  },
   dependencies = {
     'hat0uma/csvview.nvim', -- optional, for aligned/bordered column rendering
   },
@@ -49,17 +57,39 @@ soon as it's required, so a bare `{ 'antonio-decaro/csvlens' }` works too.
 :CsvLimit 200
 :CsvOps                      show the active pipeline
 :CsvReset                    clear all operations
+:CsvShell                    open/focus the interactive shell for the lens
 ```
 
 Each command replaces that one stage of the pipeline and re-runs the query
 against the original file, so operations can be layered and revised in any
 order.
 
+## Shell
+
+`:CsvShell` opens a small prompt-buffer split bound to the lens it was called
+from, so the same verbs above can be typed one per line instead of as
+separate ex-commands:
+
+```
+csv> where cores == 64 and exec_ns > 5000
+csv> groupby cores
+csv> agg exec_ns:mean,exec_ns:p95
+csv> ops
+```
+
+Short aliases work too (`w`, `sort`/`s`, `group`/`g`, `a`, `c`, `l`, `o`, `r`,
+`q`, `h`/`?`). `<Tab>` completes command names, column names (sourced from the
+lens's current result set), agg functions, and sort directions; `<Up>`/`<Down>`
+recall previous commands. `help` lists the full command set, `close` (or `q`
+in Normal mode) closes the shell without touching the lens. Closing the lens
+closes its shell too.
+
 ## Configuration
 
 ```lua
 require('csvlens').setup {
-  python = 'python3',  -- interpreter used to run scripts/csvlens.py
-  limit = 500,          -- default row cap per lens
+  python = 'python3', -- interpreter used to run scripts/csvlens.py
+  limit = 500,         -- default row cap per lens
+  shell = true,        -- auto-open :CsvShell alongside each new :CsvLens
 }
 ```
