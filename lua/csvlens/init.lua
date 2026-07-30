@@ -371,6 +371,14 @@ local function open_shell(lens)
     end,
   })
 
+  -- Neovim leaves prompt buffers in Normal mode when they're not focused;
+  -- jump straight back into Insert whenever the shell is (re)entered so the
+  -- only way to see Normal mode here is a deliberate <Esc>.
+  vim.api.nvim_create_autocmd({ 'BufEnter', 'WinEnter' }, {
+    buffer = shbuf,
+    command = 'startinsert!',
+  })
+
   shell_echo(shbuf, { "csvlens shell -- type 'help' for commands" })
   vim.cmd 'startinsert'
 end
