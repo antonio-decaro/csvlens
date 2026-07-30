@@ -10,7 +10,10 @@
 -- :CsvOps               show the active pipeline
 -- :CsvReset             clear all operations
 -- :CsvShell             open an interactive shell for the lens (same verbs,
---                        one per line, with history and <Tab> completion)
+--                        one per line, with history and <Tab> completion).
+--                        opts.shell_backend picks 'prompt' (default, pure
+--                        Lua) or 'terminal' (scripts/csvlens_shell.py, native
+--                        readline editing -- see the README's Shell section)
 --
 -- Operations compose into a pipeline; each command replaces that one stage and
 -- re-runs the query. The lens never writes -- the source file is only read.
@@ -30,6 +33,7 @@ M.config = {
   python = 'python3',
   limit = 500, -- default cap so a 45k-row file doesn't flood the buffer
   shell = true, -- auto-open the interactive :CsvShell alongside each new lens
+  shell_backend = 'prompt', -- or 'terminal' (scripts/csvlens_shell.py, native readline editing)
 }
 
 local state = {} -- lens bufnr -> { src = path, ops = {...}, fields = {...}, shell = bufnr? }
@@ -125,6 +129,42 @@ end
 local function apply_reset(buf)
   state[buf].ops = {}
   return refresh(buf)
+end
+
+local function hex_decode(s)
+  return (s:gsub('%x%x', function(b)
+    return string.char(tonumber(b, 16))
+  end))
+end
+
+--- Entry point for the terminal shell's IPC (scripts/csvlens_shell.py),
+--- reached via `nvim --server $NVIM --remote-expr 'luaeval("csvlens_apply(...)")'`.
+--- `--remote-expr` evaluates in *this* process, not the client's, so values
+--- can't travel via env vars set on the client subprocess -- they have to be
+--- embedded in the expression string itself. `op` is always one of a fixed
+--- set of literals the Python script controls (safe to interpolate as-is);
+--- `hexval` is the free-form user-typed argument, hex-encoded by the caller
+--- so it can never contain a quote character that breaks the expression.
+function _G.csvlens_apply(lens, op, hexval)
+  lens = tonumber(lens)
+  local val = hex_decode(hexval or '')
+  if not (lens and state[lens]) then
+    return 'csvlens: lens buffer is gone'
+  end
+
+  local ok
+  if op == 'limit' then
+    ok = apply_limit(lens, val)
+  elseif op == 'reset' then
+    ok = apply_reset(lens)
+  elseif op == 'ops' then
+    ok = true
+  else
+    ok = apply_op(lens, op, val)
+  end
+
+  return ok and (vim.b[lens].csvlens_status or describe(state[lens]))
+    or 'csvlens: error running query (see :messages)'
 end
 
 local function set_op(key)
@@ -311,21 +351,27 @@ local function shell_complete(shbuf, lens)
   vim.fn.complete(#prompt + delim_at + 1, candidates)
 end
 
-local function open_shell(lens)
-  if not state[lens] then
-    return
-  end
-
+--- Shared by both shell backends: if a shell buffer already exists for this
+--- lens, refocus (or re-split into) its window instead of creating another.
+--- Returns true if it handled things, false if the caller must create one.
+local function focus_existing_shell(lens)
   local existing = state[lens].shell
-  if existing and vim.api.nvim_buf_is_valid(existing) then
-    local win = vim.fn.bufwinid(existing)
-    if win == -1 then
-      vim.cmd 'belowright 3split'
-      vim.api.nvim_win_set_buf(0, existing)
-    else
-      vim.api.nvim_set_current_win(win)
-    end
-    vim.cmd 'startinsert'
+  if not (existing and vim.api.nvim_buf_is_valid(existing)) then
+    return false
+  end
+  local win = vim.fn.bufwinid(existing)
+  if win == -1 then
+    vim.cmd 'belowright 3split'
+    vim.api.nvim_win_set_buf(0, existing)
+  else
+    vim.api.nvim_set_current_win(win)
+  end
+  vim.cmd 'startinsert'
+  return true
+end
+
+local function open_prompt_shell(lens)
+  if not state[lens] or focus_existing_shell(lens) then
     return
   end
 
@@ -381,6 +427,62 @@ local function open_shell(lens)
 
   shell_echo(shbuf, { "csvlens shell -- type 'help' for commands" })
   vim.cmd 'startinsert'
+end
+
+--- The other :CsvShell backend: a real terminal running scripts/csvlens_shell.py
+--- (stdlib cmd.Cmd + readline), which talks back to _G.csvlens_apply above via
+--- `nvim --server $NVIM --remote-expr`. Buys native line editing/history at the
+--- cost of a subprocess round trip per command and a soft readline dependency.
+local function open_terminal_shell(lens)
+  if not state[lens] or focus_existing_shell(lens) then
+    return
+  end
+
+  vim.cmd 'belowright 10split'
+  local shbuf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(0, shbuf) -- avoid reusing the current (lens) buffer,
+  state[lens].shell = shbuf -- same bug as the prompt shell hit
+
+  local script = plugin_root() .. '/scripts/csvlens_shell.py'
+  vim.fn.termopen({ M.config.python, script, tostring(lens) }, {
+    on_exit = vim.schedule_wrap(function()
+      if vim.api.nvim_buf_is_valid(shbuf) then
+        vim.cmd('bwipeout! ' .. shbuf)
+      end
+    end),
+  })
+  -- termopen() names the buffer itself (term://...); reclaim a predictable
+  -- name afterward so tooling/other code can recognize a csvlens shell.
+  pcall(vim.api.nvim_buf_set_name, shbuf, 'csvlens://shell/' .. lens)
+  vim.bo[shbuf].bufhidden = 'wipe'
+
+  vim.keymap.set('t', '<Esc>', [[<C-\><C-n>]], { buffer = shbuf })
+  vim.keymap.set('n', 'q', '<cmd>bwipeout!<CR>', { buffer = shbuf })
+
+  vim.api.nvim_create_autocmd('BufWipeout', {
+    buffer = shbuf,
+    callback = function()
+      if state[lens] then
+        state[lens].shell = nil
+      end
+    end,
+  })
+  -- Same fix as the prompt shell: terminal buffers also drop to
+  -- Terminal-Normal when unfocused, so re-enter on every (re)focus.
+  vim.api.nvim_create_autocmd({ 'BufEnter', 'WinEnter' }, {
+    buffer = shbuf,
+    command = 'startinsert!',
+  })
+
+  vim.cmd 'startinsert'
+end
+
+local function open_shell(lens)
+  if M.config.shell_backend == 'terminal' then
+    open_terminal_shell(lens)
+  else
+    open_prompt_shell(lens)
+  end
 end
 
 function M.open(src)

@@ -84,12 +84,36 @@ recall previous commands. `help` lists the full command set, `close` (or `q`
 in Normal mode) closes the shell without touching the lens. Closing the lens
 closes its shell too.
 
+### Terminal backend
+
+Set `shell_backend = 'terminal'` to get `:CsvShell` as a real `:terminal`
+buffer running `scripts/csvlens_shell.py` instead of the prompt buffer above.
+Same commands and aliases, but editing/history come from Python's stdlib
+`readline` (via `cmd.Cmd`) rather than a hand-rolled implementation, so you
+get native `Ctrl-A`/`E`/`W`, kill-ring, etc. for free.
+
+Tradeoffs versus the default:
+- Each command spawns a short-lived `nvim --server $NVIM --remote-expr`
+  subprocess to apply itself and fetch the pipeline status back (typically
+  well under 100ms, but it's a real process spawn per command, not an
+  in-process call).
+- `<Tab>` only completes command names in this backend (via `cmd.Cmd`, for
+  free); column-name/agg-func completion is prompt-buffer-only for now.
+- Needs `readline` importable in your `python3` — most installs have it, but
+  if not, the shell still works, just without arrow-key history/editing
+  (it prints a one-line warning on startup when this happens).
+- Needs the `nvim` binary reachable on `$PATH` from inside Neovim's own
+  job environment (true by construction, since the job is spawned by Neovim
+  itself) and `$NVIM` set, which Neovim does automatically for every
+  `:terminal` job.
+
 ## Configuration
 
 ```lua
 require('csvlens').setup {
-  python = 'python3', -- interpreter used to run scripts/csvlens.py
-  limit = 500,         -- default row cap per lens
-  shell = true,        -- auto-open :CsvShell alongside each new :CsvLens
+  python = 'python3',       -- interpreter used to run scripts/csvlens.py
+  limit = 500,               -- default row cap per lens
+  shell = true,               -- auto-open :CsvShell alongside each new :CsvLens
+  shell_backend = 'prompt',    -- or 'terminal', see "Terminal backend" above
 }
 ```
