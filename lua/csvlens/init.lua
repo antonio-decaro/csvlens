@@ -203,6 +203,8 @@ local AGG_FUNCS =
 local SHELL_HELP = {
   "csvlens shell -- one command per line, 'help' for this message",
   '  where <expr>       filter rows, e.g. where cores == 64 and exec_ns > 5000',
+  '                     is_outlier(col, by) flags rows off from their by-group,',
+  '                     e.g. where is_outlier("exec_ns", by="cores")',
   '  sortby col[:desc]  sort rows, comma-separated, earlier keys win',
   '  groupby col,...    group rows by column(s)',
   '  agg col:func,...   aggregate for groupby, e.g. agg exec_ns:mean,exec_ns:p95',

@@ -54,7 +54,7 @@ class Shell(cmd.Cmd):
         print(remote_expr(self.nvim_addr, expr))
 
     def do_where(self, arg):
-        """where <expr>       filter rows, e.g. where cores == 64 and exec_ns > 5000"""
+        """where <expr>       filter rows, e.g. cores == 64, or is_outlier("exec_ns", by="cores")"""
         self._apply("where", arg)
 
     do_w = do_where

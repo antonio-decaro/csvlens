@@ -50,6 +50,8 @@ soon as it's required, so a bare `{ 'antonio-decaro/csvlens' }` works too.
 ```
 :CsvLens                     open a lens on the current CSV buffer
 :CsvWhere cores == 64        filter rows (Python expression over column names)
+:CsvWhere is_outlier("exec_ns", by="cores")
+                              keep only rows off from their by-group (see below)
 :CsvSortBy exec_ns:desc,step
 :CsvGroupBy cores            aggregate (see :CsvAgg for available functions)
 :CsvAgg exec_ns:mean,exec_ns:p95
@@ -68,7 +70,23 @@ order.
 
 `outliers` flags values more than 1.5*IQR outside a group's quartiles (Tukey's
 fences) and lists them pipe-separated in the cell, e.g. `exec_ns:outliers`
-next to `exec_ns:mean` shows which rows pulled a group's average off.
+next to `exec_ns:mean` shows which rows pulled a group's average off. That's a
+summary, though — it collapses each group into one row. To see the full
+outlier rows themselves (every column intact), use `is_outlier(col, by)`
+inside `--where`/`where` instead:
+
+```
+:CsvWhere is_outlier("exec_ns", by="cores")
+:CsvWhere is_outlier("exec_ns", by=("cores", "arch")) and arch == "arm"
+```
+
+Same Tukey's-fences method as the agg function. `by` is a column name or a
+tuple of them (multi-column group); both `col` and `by` must be quoted string
+literals, since `--where` compiles its expression and evaluates column names
+to their row values before the call happens, so `is_outlier` never sees the
+bare names, only quoted strings tell it which columns to use. It composes
+like any other `--where` condition (`and`/`or`/`not`, mixed with plain
+comparisons).
 
 ## Shell
 
