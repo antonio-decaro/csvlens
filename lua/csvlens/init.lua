@@ -8,6 +8,8 @@
 -- :CsvCols step,core,exec_ns
 -- :CsvLimit 200
 -- :CsvOps               show the active pipeline
+-- :CsvSchema            list the source CSV's original columns (handy after
+--                        :CsvGroupBy/:CsvCols narrows what's on screen)
 -- :CsvReset             clear all operations
 -- :CsvShell             open an interactive shell for the lens (same verbs,
 --                        one per line, with history and <Tab> completion).
@@ -131,6 +133,22 @@ local function apply_reset(buf)
   return refresh(buf)
 end
 
+--- The source file's original header, regardless of the current pipeline --
+--- e.g. after :CsvGroupBy/:CsvCols has narrowed what's on screen, this still
+--- lists every column available to build the next :CsvGroupBy/:CsvAgg/:CsvCols.
+local function fetch_schema(buf)
+  local st = state[buf]
+  local cmd = { M.config.python, M.config.script, st.src, '--schema' }
+  local out = vim.fn.systemlist(cmd)
+
+  if vim.v.shell_error ~= 0 then
+    vim.notify(table.concat(out, '\n'), vim.log.levels.ERROR, { title = 'csvlens' })
+    return nil
+  end
+
+  return out[1] and vim.split(out[1], ',', { plain = true }) or {}
+end
+
 local function hex_decode(s)
   return (s:gsub('%x%x', function(b)
     return string.char(tonumber(b, 16))
@@ -150,6 +168,11 @@ function _G.csvlens_apply(lens, op, hexval)
   local val = hex_decode(hexval or '')
   if not (lens and state[lens]) then
     return 'csvlens: lens buffer is gone'
+  end
+
+  if op == 'schema' then
+    local cols = fetch_schema(lens)
+    return cols and table.concat(cols, ', ') or 'csvlens: error running query (see :messages)'
   end
 
   local ok
@@ -209,9 +232,11 @@ local SHELL_HELP = {
   '  cols col,...       show only these columns, in order',
   '  limit N            cap the number of rows shown',
   '  ops                show the active pipeline',
+  "  schema             list the source CSV's original columns (unaffected",
+  '                     by groupby/cols -- useful for picking what to add next)',
   '  reset              clear all operations',
   '  close              close this shell window',
-  'aliases: w/sort+s, group+g, a, c, l, o, r, q, h/?',
+  'aliases: w/sort+s, group+g, a, c, l, o, r, sc, q, h/?',
   '<Tab> completes commands and column names, <Up>/<Down> recall history.',
 }
 
@@ -252,6 +277,9 @@ local function shell_dispatch(shbuf, lens, line)
   elseif cmd == 'reset' or cmd == 'r' then
     ok = apply_reset(lens)
     status = vim.b[lens].csvlens_status
+  elseif cmd == 'schema' or cmd == 'sc' then
+    local cols = fetch_schema(lens)
+    ok, status = cols ~= nil, cols and table.concat(cols, ', ')
   elseif cmd == 'help' or cmd == 'h' or cmd == '?' then
     shell_echo(shbuf, SHELL_HELP)
     return
@@ -324,7 +352,7 @@ local function shell_complete(shbuf, lens)
   local candidates
   if delim_at == 0 then
     candidates = vim.tbl_keys(OP_ALIASES)
-    vim.list_extend(candidates, { 'limit', 'ops', 'reset', 'help', 'close' })
+    vim.list_extend(candidates, { 'limit', 'ops', 'schema', 'reset', 'help', 'close' })
   else
     local cmd = OP_ALIASES[(input:match '^(%S+)') or '']
     if cmd == 'agg' and sep == ':' then
@@ -570,6 +598,16 @@ local function create_commands()
       vim.notify(vim.b[buf].csvlens_status or describe(state[buf]), vim.log.levels.INFO)
     end
   end, { desc = 'Show the active lens pipeline (where/group/agg/sort/cols/limit)' })
+
+  vim.api.nvim_create_user_command('CsvSchema', function()
+    local buf = current_lens()
+    if buf then
+      local cols = fetch_schema(buf)
+      if cols then
+        vim.notify(table.concat(cols, ', '), vim.log.levels.INFO, { title = 'csvlens: original columns' })
+      end
+    end
+  end, { desc = "List the source CSV's original columns, unaffected by :CsvGroupBy/:CsvCols" })
 
   vim.api.nvim_create_user_command('CsvReset', function()
     local buf = current_lens()

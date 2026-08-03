@@ -9,6 +9,10 @@ setup is required.
 pipeline and re-run the query. The source file is only ever read, never
 written.
 
+`:CsvSchema` lists the source CSV's original columns regardless of the
+current pipeline — handy after `:CsvGroupBy`/`:CsvCols` has narrowed what's on
+screen, to see what else is available to group, aggregate, or select next.
+
 `:CsvLens` also opens `:CsvShell`, a small REPL below the lens where you type
 the same verbs one per line (`where cores == 64`, `agg exec_ns:mean`, ...)
 instead of separate ex-commands, with `<Tab>` completion and `<Up>`/`<Down>`
@@ -28,7 +32,7 @@ history.
   'antonio-decaro/csvlens',
   cmd = {
     'CsvLens', 'CsvWhere', 'CsvSortBy', 'CsvGroupBy', 'CsvAgg', 'CsvCols',
-    'CsvLimit', 'CsvOps', 'CsvReset', 'CsvShell',
+    'CsvLimit', 'CsvOps', 'CsvSchema', 'CsvReset', 'CsvShell',
   },
   dependencies = {
     'hat0uma/csvview.nvim', -- optional, for aligned/bordered column rendering
@@ -60,6 +64,9 @@ soon as it's required, so a bare `{ 'antonio-decaro/csvlens' }` works too.
 :CsvCols step,core,exec_ns
 :CsvLimit 200
 :CsvOps                      show the active pipeline
+:CsvSchema                   list the source CSV's original columns (handy
+                              after :CsvGroupBy/:CsvCols to see what else
+                              is available to add back in)
 :CsvReset                    clear all operations
 :CsvShell                    open/focus the interactive shell for the lens
 ```
@@ -101,8 +108,8 @@ csv> agg exec_ns:mean,exec_ns:p95
 csv> ops
 ```
 
-Short aliases work too (`w`, `sort`/`s`, `group`/`g`, `a`, `c`, `l`, `o`, `r`,
-`q`, `h`/`?`). `<Tab>` completes command names, column names (sourced from the
+Short aliases work too (`w`, `sort`/`s`, `group`/`g`, `a`, `c`, `l`, `o`, `sc`,
+`r`, `q`, `h`/`?`). `<Tab>` completes command names, column names (sourced from the
 lens's current result set), agg functions, and sort directions; `<Up>`/`<Down>`
 recall previous commands. `help` lists the full command set, `close` (or `q`
 in Normal mode) closes the shell without touching the lens. Closing the lens

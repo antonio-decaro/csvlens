@@ -114,6 +114,13 @@ def load(path):
         ]
 
 
+def read_fields(path):
+    """Just the header row -- doesn't read the rest of the file, so it stays
+    cheap to call after a --group/--cols has narrowed what's on screen."""
+    with open(path, newline="") as fh:
+        return csv.DictReader(fh).fieldnames or []
+
+
 def make_is_outlier(rows):
     """Builds the is_outlier(col, by) callable exposed to --where. eval()
     only ever sees one row's values as locals, so this needs the full row
@@ -232,7 +239,13 @@ def main():
     p.add_argument("--agg")
     p.add_argument("--limit", type=int)
     p.add_argument("--precision", type=int, default=3)
+    p.add_argument("--schema", action="store_true")
     a = p.parse_args()
+
+    if a.schema:
+        w = csv.writer(sys.stdout, lineterminator="\n")
+        w.writerow(read_fields(a.file))
+        return
 
     global PRECISION
     PRECISION = a.precision

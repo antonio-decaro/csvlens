@@ -58,6 +58,23 @@ describe('csvlens', function()
     eq({ 'cores,n,exec_ns_sum', '32,1,999', '64,3,900' }, buf_lines())
   end)
 
+  it('lists the original columns with :CsvSchema even after grouping', function()
+    csvlens.open(csv_path)
+    vim.cmd 'CsvGroupBy cores'
+    vim.cmd 'CsvAgg exec_ns:sum'
+    eq({ 'cores,n,exec_ns_sum', '32,1,999', '64,3,900' }, buf_lines())
+
+    local notified
+    local orig_notify = vim.notify
+    vim.notify = function(msg)
+      notified = msg
+    end
+    vim.cmd 'CsvSchema'
+    vim.notify = orig_notify
+
+    eq('cores, exec_ns', notified)
+  end)
+
   it('clears the pipeline with :CsvReset', function()
     csvlens.open(csv_path)
     vim.cmd 'CsvWhere cores == 64'

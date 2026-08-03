@@ -149,6 +149,14 @@ def test_apply_group_unknown_agg_exits():
         csvlens.apply_group(fields, rows, "g", "v:bogus")
 
 
+# -- read_fields ---------------------------------------------------------------
+
+
+def test_read_fields(tmp_csv):
+    path = tmp_csv(["g", "v"], [{"g": "a", "v": 1}])
+    assert csvlens.read_fields(path) == ["g", "v"]
+
+
 # -- CLI (main) --------------------------------------------------------------------
 
 
@@ -205,3 +213,15 @@ def test_cli_missing_column_fails(tmp_csv):
     )
     assert result.returncode != 0
     assert "no such column" in result.stderr
+
+
+def test_cli_schema_prints_original_header(tmp_csv):
+    path = tmp_csv(["g", "v"], [{"g": "a", "v": 1}, {"g": "a", "v": 3}])
+    result = run_cli(str(path), "--schema")
+    assert result.stdout.strip().splitlines() == ["g,v"]
+
+
+def test_cli_schema_ignores_group_and_cols(tmp_csv):
+    path = tmp_csv(["g", "v"], [{"g": "a", "v": 1}, {"g": "a", "v": 3}])
+    result = run_cli(str(path), "--group", "g", "--agg", "v:sum", "--schema")
+    assert result.stdout.strip().splitlines() == ["g,v"]

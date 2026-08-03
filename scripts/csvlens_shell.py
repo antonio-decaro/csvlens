@@ -98,6 +98,13 @@ class Shell(cmd.Cmd):
 
     do_o = do_ops
 
+    def do_schema(self, arg):
+        """schema             list the source CSV's original columns (unaffected
+        by groupby/cols -- useful for picking what to add next)"""
+        self._apply("schema", arg)
+
+    do_sc = do_schema
+
     def do_reset(self, arg):
         """reset              clear all operations"""
         self._apply("reset", arg)
