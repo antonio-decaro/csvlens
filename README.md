@@ -136,9 +136,9 @@ Tradeoffs versus the default:
 - Each command spawns a short-lived `nvim --server $NVIM --remote-expr`
   subprocess to apply itself and fetch the pipeline status back (typically
   well under 100ms, but it's a real process spawn per command, not an
-  in-process call).
-- `<Tab>` only completes command names in this backend (via `cmd.Cmd`, for
-  free); column-name/agg-func completion is prompt-buffer-only for now.
+  in-process call). `<Tab>` completion of column names/agg funcs/sort
+  directions pays the same round trip on every press, since it re-queries
+  the lens's current columns each time rather than caching them.
 - Needs `readline` importable in your `python3` — most installs have it, but
   if not, the shell still works, just without arrow-key history/editing
   (it prints a one-line warning on startup when this happens).

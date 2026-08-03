@@ -186,6 +186,12 @@ function _G.csvlens_apply(lens, op, hexval)
     return cols and table.concat(cols, ', ') or 'csvlens: error running query (see :messages)'
   end
 
+  if op == 'fields' then
+    -- the lens's *current* result columns, for the terminal shell's <Tab>
+    -- completion -- unlike 'schema' above, this reflects :CsvGroupBy/:CsvCols
+    return table.concat(state[lens].fields, ', ')
+  end
+
   if op == 'pin' then
     return pin_lens(lens)
   end

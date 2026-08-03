@@ -24,6 +24,21 @@ import os
 import subprocess
 import sys
 
+# Mirrors AGGS in csvlens.py -- keep in sync.
+AGG_FUNCS = [
+    "count",
+    "sum",
+    "mean",
+    "median",
+    "min",
+    "max",
+    "p50",
+    "p95",
+    "p99",
+    "stdev",
+    "outliers",
+]
+
 
 def remote_expr(nvim_addr, expr):
     try:
@@ -54,11 +69,36 @@ class Shell(cmd.Cmd):
         expr = f'luaeval("csvlens_apply({self.lens}, \'{op}\', \'{hexval}\')")'
         print(remote_expr(self.nvim_addr, expr))
 
+    def _fields(self):
+        """The lens's current result columns, fetched fresh over the same
+        nvim --server round trip every other command already pays here."""
+        expr = f'luaeval("csvlens_apply({self.lens}, \'fields\', \'\')")'
+        result = remote_expr(self.nvim_addr, expr)
+        if not result or result.startswith("csvlens:"):
+            return []
+        return [c.strip() for c in result.split(",")]
+
+    def _complete_fields(self, text, line, begidx, endidx, colon_candidates=None):
+        """Shared by every column-taking verb below: column names normally,
+        or `colon_candidates` (agg funcs / asc|desc) right after a ':'."""
+        prev_char = line[begidx - 1] if begidx > 0 else ""
+        candidates = (
+            colon_candidates
+            if (prev_char == ":" and colon_candidates)
+            else self._fields()
+        )
+        return [c for c in candidates if c.lower().startswith(text.lower())]
+
     def do_where(self, arg):
         """where <expr>       filter rows, e.g. cores == 64, or is_outlier("exec_ns", by="cores")"""
         self._apply("where", arg)
 
     do_w = do_where
+
+    def complete_where(self, text, line, begidx, endidx):
+        return self._complete_fields(text, line, begidx, endidx)
+
+    complete_w = complete_where
 
     def do_sortby(self, arg):
         """sortby col[:desc]  sort rows, comma-separated, earlier keys win"""
@@ -67,6 +107,14 @@ class Shell(cmd.Cmd):
     do_sort = do_sortby
     do_s = do_sortby
 
+    def complete_sortby(self, text, line, begidx, endidx):
+        return self._complete_fields(
+            text, line, begidx, endidx, colon_candidates=["asc", "desc"]
+        )
+
+    complete_sort = complete_sortby
+    complete_s = complete_sortby
+
     def do_groupby(self, arg):
         """groupby col,...    group rows by column(s)"""
         self._apply("group", arg)
@@ -74,17 +122,35 @@ class Shell(cmd.Cmd):
     do_group = do_groupby
     do_g = do_groupby
 
+    def complete_groupby(self, text, line, begidx, endidx):
+        return self._complete_fields(text, line, begidx, endidx)
+
+    complete_group = complete_groupby
+    complete_g = complete_groupby
+
     def do_agg(self, arg):
         """agg col:func,...   aggregate for groupby, e.g. agg exec_ns:mean,exec_ns:p95"""
         self._apply("agg", arg)
 
     do_a = do_agg
 
+    def complete_agg(self, text, line, begidx, endidx):
+        return self._complete_fields(
+            text, line, begidx, endidx, colon_candidates=AGG_FUNCS
+        )
+
+    complete_a = complete_agg
+
     def do_cols(self, arg):
         """cols col,...       show only these columns, in order"""
         self._apply("cols", arg)
 
     do_c = do_cols
+
+    def complete_cols(self, text, line, begidx, endidx):
+        return self._complete_fields(text, line, begidx, endidx)
+
+    complete_c = complete_cols
 
     def do_limit(self, arg):
         """limit N            cap the number of rows shown"""
@@ -145,7 +211,12 @@ def main():
         sys.exit("csvlens_shell: $NVIM is not set (must run inside a Neovim :terminal)")
 
     try:
-        import readline  # noqa: F401  -- side-effect import wires up cmd.Cmd's line editing
+        import readline  # side-effect import wires up cmd.Cmd's line editing
+
+        # Column lists/agg specs are comma- and colon-separated (cols a,b,c,
+        # sortby col:desc); add those to the default word-break characters so
+        # <Tab> completes just the token under the cursor, not the whole arg.
+        readline.set_completer_delims(readline.get_completer_delims() + ",:")
     except ImportError:
         print("csvlens: readline unavailable -- arrow-key history/editing disabled")
 

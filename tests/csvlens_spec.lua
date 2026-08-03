@@ -75,6 +75,18 @@ describe('csvlens', function()
     eq('cores, exec_ns', notified)
   end)
 
+  it("exposes the lens's current columns via csvlens_apply's 'fields' op (terminal shell completion)", function()
+    csvlens.open(csv_path)
+    vim.cmd 'CsvGroupBy cores'
+    vim.cmd 'CsvAgg exec_ns:sum'
+    eq({ 'cores,n,exec_ns_sum', '32,1,999', '64,3,900' }, buf_lines())
+
+    local lens = vim.api.nvim_get_current_buf()
+    -- unlike 'schema' (the original file header), 'fields' reflects the
+    -- grouped/aggregated columns currently on screen
+    eq('cores, n, exec_ns_sum', _G.csvlens_apply(lens, 'fields', ''))
+  end)
+
   it('forks an independent lens tab with :CsvPin', function()
     csvlens.open(csv_path)
     vim.cmd 'CsvWhere cores == 64'
