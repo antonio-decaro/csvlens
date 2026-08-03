@@ -23,11 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: leafo/gh-actions-lua@v10
-        with:
-          luaVersion: 'luajit-2.1'
-      - uses: leafo/gh-actions-luarocks@v4
-      - run: luarocks install luacheck
+      - run: sudo apt-get update && sudo apt-get install -y lua5.1 luarocks
+      - run: sudo luarocks install luacheck
       - run: luacheck lua/ tests/
       - uses: JohnnyMorganz/stylua-action@v4
         with:
