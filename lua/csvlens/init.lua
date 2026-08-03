@@ -163,8 +163,7 @@ function _G.csvlens_apply(lens, op, hexval)
     ok = apply_op(lens, op, val)
   end
 
-  return ok and (vim.b[lens].csvlens_status or describe(state[lens]))
-    or 'csvlens: error running query (see :messages)'
+  return ok and (vim.b[lens].csvlens_status or describe(state[lens])) or 'csvlens: error running query (see :messages)'
 end
 
 local function set_op(key)
@@ -197,8 +196,7 @@ local OP_ALIASES = {
 }
 
 -- Mirrors AGGS in scripts/csvlens.py -- keep in sync.
-local AGG_FUNCS =
-  { 'count', 'sum', 'mean', 'median', 'min', 'max', 'p50', 'p95', 'p99', 'stdev', 'outliers' }
+local AGG_FUNCS = { 'count', 'sum', 'mean', 'median', 'min', 'max', 'p50', 'p95', 'p99', 'stdev', 'outliers' }
 
 local SHELL_HELP = {
   "csvlens shell -- one command per line, 'help' for this message",
@@ -242,7 +240,7 @@ local function shell_dispatch(shbuf, lens, line)
   local cmd, rest = line:match '^(%S+)%s*(.*)$'
   cmd = cmd and cmd:lower() or ''
 
-  local ok, status = true, nil
+  local ok, status = true, nil -- luacheck: ignore 311 -- every branch below assigns status before use
   if OP_ALIASES[cmd] then
     ok = apply_op(lens, OP_ALIASES[cmd], rest)
     status = vim.b[lens].csvlens_status
