@@ -75,6 +75,41 @@ describe('csvlens', function()
     eq('cores, exec_ns', notified)
   end)
 
+  it('forks an independent lens tab with :CsvPin', function()
+    csvlens.open(csv_path)
+    vim.cmd 'CsvWhere cores == 64'
+    vim.cmd 'CsvGroupBy cores'
+    vim.cmd 'CsvAgg exec_ns:sum'
+    eq({ 'cores,n,exec_ns_sum', '64,3,900' }, buf_lines())
+
+    local orig_tab = vim.api.nvim_get_current_tabpage()
+    local tabs_before = #vim.api.nvim_list_tabpages()
+
+    vim.cmd 'CsvPin'
+
+    -- :CsvPin opens (and switches to) a second tab, like :CsvLens itself
+    eq(tabs_before + 1, #vim.api.nvim_list_tabpages())
+    local pinned_tab = vim.api.nvim_get_current_tabpage()
+    assert.is_not.same(orig_tab, pinned_tab)
+    -- the pinned tab shows the same grouped/aggregated snapshot
+    eq({ 'cores,n,exec_ns_sum', '64,3,900' }, buf_lines())
+
+    -- resetting the ORIGINAL lens afterward doesn't touch the pinned tab
+    vim.api.nvim_set_current_tabpage(orig_tab)
+    vim.cmd 'CsvReset'
+    eq({ 'cores,exec_ns', '64,100', '64,300', '64,500', '32,999' }, buf_lines())
+
+    vim.api.nvim_set_current_tabpage(pinned_tab)
+    eq({ 'cores,n,exec_ns_sum', '64,3,900' }, buf_lines())
+
+    -- mutating the PINNED lens afterward doesn't touch the original
+    vim.cmd 'CsvWhere cores == 32'
+    eq({ 'cores,n,exec_ns_sum', '32,1,999' }, buf_lines())
+
+    vim.api.nvim_set_current_tabpage(orig_tab)
+    eq({ 'cores,exec_ns', '64,100', '64,300', '64,500', '32,999' }, buf_lines())
+  end)
+
   it('clears the pipeline with :CsvReset', function()
     csvlens.open(csv_path)
     vim.cmd 'CsvWhere cores == 64'

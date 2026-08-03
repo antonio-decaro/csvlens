@@ -105,6 +105,13 @@ class Shell(cmd.Cmd):
 
     do_sc = do_schema
 
+    def do_pin(self, arg):
+        """pin                fork the current pipeline into a new, independent
+        lens tab (same source, ops snapshotted)"""
+        self._apply("pin", arg)
+
+    do_p = do_pin
+
     def do_reset(self, arg):
         """reset              clear all operations"""
         self._apply("reset", arg)

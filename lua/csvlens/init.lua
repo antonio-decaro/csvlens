@@ -10,6 +10,9 @@
 -- :CsvOps               show the active pipeline
 -- :CsvSchema            list the source CSV's original columns (handy after
 --                        :CsvGroupBy/:CsvCols narrows what's on screen)
+-- :CsvPin               fork the current pipeline into a new, independent
+--                        lens tab (same source, ops snapshotted); pin again
+--                        on either tab for yet another copy
 -- :CsvReset             clear all operations
 -- :CsvShell             open an interactive shell for the lens (same verbs,
 --                        one per line, with history and <Tab> completion).
@@ -39,6 +42,11 @@ M.config = {
 }
 
 local state = {} -- lens bufnr -> { src = path, ops = {...}, fields = {...}, shell = bufnr? }
+
+local pin_seq = 0 -- disambiguates buffer names across repeated pins of the same lens
+local pin_lens -- assigned near create_lens/M.open below; forward-declared
+-- because _G.csvlens_apply and shell_dispatch (defined earlier in this
+-- file) need to call it
 
 local function build_args(st)
   local args = { st.src }
@@ -175,6 +183,10 @@ function _G.csvlens_apply(lens, op, hexval)
     return cols and table.concat(cols, ', ') or 'csvlens: error running query (see :messages)'
   end
 
+  if op == 'pin' then
+    return pin_lens(lens)
+  end
+
   local ok
   if op == 'limit' then
     ok = apply_limit(lens, val)
@@ -234,9 +246,11 @@ local SHELL_HELP = {
   '  ops                show the active pipeline',
   "  schema             list the source CSV's original columns (unaffected",
   '                     by groupby/cols -- useful for picking what to add next)',
+  '  pin                fork the current pipeline into a new, independent',
+  '                     lens tab (same source, ops snapshotted)',
   '  reset              clear all operations',
   '  close              close this shell window',
-  'aliases: w/sort+s, group+g, a, c, l, o, r, sc, q, h/?',
+  'aliases: w/sort+s, group+g, a, c, l, o, r, sc, p, q, h/?',
   '<Tab> completes commands and column names, <Up>/<Down> recall history.',
 }
 
@@ -280,6 +294,8 @@ local function shell_dispatch(shbuf, lens, line)
   elseif cmd == 'schema' or cmd == 'sc' then
     local cols = fetch_schema(lens)
     ok, status = cols ~= nil, cols and table.concat(cols, ', ')
+  elseif cmd == 'pin' or cmd == 'p' then
+    status = pin_lens(lens)
   elseif cmd == 'help' or cmd == 'h' or cmd == '?' then
     shell_echo(shbuf, SHELL_HELP)
     return
@@ -352,7 +368,7 @@ local function shell_complete(shbuf, lens)
   local candidates
   if delim_at == 0 then
     candidates = vim.tbl_keys(OP_ALIASES)
-    vim.list_extend(candidates, { 'limit', 'ops', 'schema', 'reset', 'help', 'close' })
+    vim.list_extend(candidates, { 'limit', 'ops', 'schema', 'pin', 'reset', 'help', 'close' })
   else
     local cmd = OP_ALIASES[(input:match '^(%S+)') or '']
     if cmd == 'agg' and sep == ':' then
@@ -514,22 +530,20 @@ local function open_shell(lens)
   end
 end
 
-function M.open(src)
-  src = src ~= '' and src or vim.api.nvim_buf_get_name(0)
-  if src == '' or vim.fn.filereadable(src) == 0 then
-    vim.notify('csvlens: not a readable file: ' .. src, vim.log.levels.ERROR)
-    return
-  end
-
+--- Shared by M.open and pin_lens: creates the scratch buffer/tab for a lens
+--- over `src` with a given starting `ops`, wires up its BufWipeout cleanup,
+--- runs the first query, and opens its shell if configured. `name_suffix` (if
+--- given) is appended to the buffer name to disambiguate pinned copies.
+local function create_lens(src, ops, name_suffix)
   vim.cmd 'tabnew'
   local buf = vim.api.nvim_get_current_buf()
   vim.bo[buf].buftype = 'nofile'
   vim.bo[buf].bufhidden = 'wipe'
   vim.bo[buf].swapfile = false
   vim.bo[buf].filetype = 'csv'
-  vim.api.nvim_buf_set_name(buf, 'csvlens://' .. vim.fn.fnamemodify(src, ':t'))
+  vim.api.nvim_buf_set_name(buf, 'csvlens://' .. vim.fn.fnamemodify(src, ':t') .. (name_suffix or ''))
 
-  state[buf] = { src = src, ops = {}, fields = {} }
+  state[buf] = { src = src, ops = ops, fields = {} }
   vim.api.nvim_create_autocmd('BufWipeout', {
     buffer = buf,
     callback = function()
@@ -545,6 +559,28 @@ function M.open(src)
   if M.config.shell then
     open_shell(buf)
   end
+
+  return buf
+end
+
+--- Forks a lens's current pipeline into a brand-new, independent lens tab:
+--- same source file, ops snapshotted at pin time. Neither tab affects the
+--- other afterward -- reset/requery either one freely.
+pin_lens = function(buf)
+  local st = state[buf]
+  pin_seq = pin_seq + 1
+  local newbuf = create_lens(st.src, vim.tbl_extend('force', {}, st.ops), '#pin' .. pin_seq)
+  return ('pinned -> tab %d: %s'):format(vim.fn.tabpagenr(), vim.api.nvim_buf_get_name(newbuf))
+end
+
+function M.open(src)
+  src = src ~= '' and src or vim.api.nvim_buf_get_name(0)
+  if src == '' or vim.fn.filereadable(src) == 0 then
+    vim.notify('csvlens: not a readable file: ' .. src, vim.log.levels.ERROR)
+    return
+  end
+
+  create_lens(src, {})
 end
 
 local commands_created = false
@@ -608,6 +644,13 @@ local function create_commands()
       end
     end
   end, { desc = "List the source CSV's original columns, unaffected by :CsvGroupBy/:CsvCols" })
+
+  vim.api.nvim_create_user_command('CsvPin', function()
+    local buf = current_lens()
+    if buf then
+      vim.notify(pin_lens(buf), vim.log.levels.INFO, { title = 'csvlens' })
+    end
+  end, { desc = "Fork the lens's current pipeline into a new, independent lens tab (same source, ops snapshotted)" })
 
   vim.api.nvim_create_user_command('CsvReset', function()
     local buf = current_lens()

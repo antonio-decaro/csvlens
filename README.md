@@ -13,6 +13,12 @@ written.
 current pipeline — handy after `:CsvGroupBy`/`:CsvCols` has narrowed what's on
 screen, to see what else is available to group, aggregate, or select next.
 
+`:CsvPin` forks the lens's current pipeline (same source file, same
+where/group/agg/sort/cols/limit) into a brand-new, independent lens tab —
+useful for freezing one view while you keep tweaking or `:CsvReset`ing the
+original, or for comparing two slices side by side. Pin again, from either
+tab, for yet another independent copy.
+
 `:CsvLens` also opens `:CsvShell`, a small REPL below the lens where you type
 the same verbs one per line (`where cores == 64`, `agg exec_ns:mean`, ...)
 instead of separate ex-commands, with `<Tab>` completion and `<Up>`/`<Down>`
@@ -32,7 +38,7 @@ history.
   'antonio-decaro/csvlens',
   cmd = {
     'CsvLens', 'CsvWhere', 'CsvSortBy', 'CsvGroupBy', 'CsvAgg', 'CsvCols',
-    'CsvLimit', 'CsvOps', 'CsvSchema', 'CsvReset', 'CsvShell',
+    'CsvLimit', 'CsvOps', 'CsvSchema', 'CsvPin', 'CsvReset', 'CsvShell',
   },
   dependencies = {
     'hat0uma/csvview.nvim', -- optional, for aligned/bordered column rendering
@@ -67,6 +73,9 @@ soon as it's required, so a bare `{ 'antonio-decaro/csvlens' }` works too.
 :CsvSchema                   list the source CSV's original columns (handy
                               after :CsvGroupBy/:CsvCols to see what else
                               is available to add back in)
+:CsvPin                      fork the current pipeline into a new,
+                              independent lens tab (same source, ops
+                              snapshotted) -- pin again for another copy
 :CsvReset                    clear all operations
 :CsvShell                    open/focus the interactive shell for the lens
 ```
@@ -109,7 +118,7 @@ csv> ops
 ```
 
 Short aliases work too (`w`, `sort`/`s`, `group`/`g`, `a`, `c`, `l`, `o`, `sc`,
-`r`, `q`, `h`/`?`). `<Tab>` completes command names, column names (sourced from the
+`p`, `r`, `q`, `h`/`?`). `<Tab>` completes command names, column names (sourced from the
 lens's current result set), agg functions, and sort directions; `<Up>`/`<Down>`
 recall previous commands. `help` lists the full command set, `close` (or `q`
 in Normal mode) closes the shell without touching the lens. Closing the lens
