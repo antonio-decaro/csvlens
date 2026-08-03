@@ -201,6 +201,7 @@ def test_cli_missing_column_fails(tmp_csv):
         [sys.executable, SCRIPT, str(path), "--cols", "nope"],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert result.returncode != 0
     assert "no such column" in result.stderr
