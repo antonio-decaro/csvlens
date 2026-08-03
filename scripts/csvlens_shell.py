@@ -33,6 +33,7 @@ def remote_expr(nvim_addr, expr):
             capture_output=True,  # this client's own tty-capability probing and
             text=True,  # our readline race to read the escape-sequence replies
             timeout=5,
+            check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as e:
         return f"csvlens: could not reach Neovim ({e})"
@@ -50,7 +51,7 @@ class Shell(cmd.Cmd):
 
     def _apply(self, op, arg):
         hexval = binascii.hexlify(arg.encode()).decode()
-        expr = 'luaeval("csvlens_apply(%s, \'%s\', \'%s\')")' % (self.lens, op, hexval)
+        expr = f'luaeval("csvlens_apply({self.lens}, \'{op}\', \'{hexval}\')")'
         print(remote_expr(self.nvim_addr, expr))
 
     def do_where(self, arg):
@@ -114,7 +115,7 @@ class Shell(cmd.Cmd):
         return True
 
     def default(self, line):
-        print("csvlens: unknown command '%s' (try 'help')" % line.split()[0])
+        print(f"csvlens: unknown command '{line.split()[0]}' (try 'help')")
 
     def emptyline(self):
         pass  # stock cmd.Cmd re-runs the last command on a bare <CR>; we don't want that
