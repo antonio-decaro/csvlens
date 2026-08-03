@@ -41,14 +41,16 @@ M.config = {
   shell_backend = 'prompt', -- or 'terminal' (scripts/csvlens_shell.py, native readline editing)
 }
 
-local state = {} -- lens bufnr -> { src = path, ops = {...}, baseline = {...}, fields = {...}, shell = bufnr? }
+local state = {} -- lens bufnr -> { src = path, ops = {...}, fields = {...}, shell = bufnr?, owns_tmpfile = bool? }
 
 local pin_seq = 0 -- disambiguates buffer names across repeated pins of the same lens
 local pin_lens -- assigned near create_lens/M.open below; forward-declared
 -- because _G.csvlens_apply and shell_dispatch (defined earlier in this
 -- file) need to call it
 
-local function build_args(st)
+--- `unbounded`, if truthy, omits --limit -- used by materialize() below to
+--- capture every matching row for a pin, not just what's currently displayed.
+local function build_args(st, unbounded)
   local args = { st.src }
   local o = st.ops
   local function add(flag, val)
@@ -62,7 +64,9 @@ local function build_args(st)
   add('--agg', o.agg)
   add('--sort', o.sort)
   add('--cols', o.cols)
-  add('--limit', tostring(o.limit or M.config.limit))
+  if not unbounded then
+    add('--limit', tostring(o.limit or M.config.limit))
+  end
   return args
 end
 
@@ -110,6 +114,16 @@ local function refresh(buf)
   return true
 end
 
+--- Runs `st`'s current pipeline with no row cap, for :CsvPin -- captures
+--- every matching row, not just what's currently displayed under the
+--- lens's row --limit. Returns (output_lines, ok).
+local function materialize(st)
+  local cmd = { M.config.python, M.config.script }
+  vim.list_extend(cmd, build_args(st, true))
+  local out = vim.fn.systemlist(cmd)
+  return out, vim.v.shell_error == 0
+end
+
 --- The lens to act on: the current buffer if it is one, else the newest lens.
 local function current_lens()
   local buf = vim.api.nvim_get_current_buf()
@@ -136,11 +150,8 @@ local function apply_limit(buf, val)
   return refresh(buf)
 end
 
---- Resets to the lens's baseline -- {} for a plain :CsvLens, or the ops
---- snapshotted at :CsvPin time for a pinned tab, so resetting a pin returns
---- to the view it was pinned with rather than the raw, unfiltered file.
 local function apply_reset(buf)
-  state[buf].ops = vim.tbl_extend('force', {}, state[buf].baseline)
+  state[buf].ops = {}
   return refresh(buf)
 end
 
@@ -543,26 +554,27 @@ end
 --- over `src` with a given starting `ops`, wires up its BufWipeout cleanup,
 --- runs the first query, and opens its shell if configured. `name_suffix` (if
 --- given) is appended to the buffer name to disambiguate pinned copies.
-local function create_lens(src, ops, name_suffix)
+--- `display_name`, if given, is used instead of `src`'s own basename -- a
+--- pinned lens's real `src` is a scratch temp file, but its buffer name
+--- should still read like the original file it was pinned from.
+local function create_lens(src, ops, name_suffix, display_name)
   vim.cmd 'tabnew'
   local buf = vim.api.nvim_get_current_buf()
   vim.bo[buf].buftype = 'nofile'
   vim.bo[buf].bufhidden = 'wipe'
   vim.bo[buf].swapfile = false
   vim.bo[buf].filetype = 'csv'
-  vim.api.nvim_buf_set_name(buf, 'csvlens://' .. vim.fn.fnamemodify(src, ':t') .. (name_suffix or ''))
+  vim.api.nvim_buf_set_name(buf, 'csvlens://' .. (display_name or vim.fn.fnamemodify(src, ':t')) .. (name_suffix or ''))
 
-  state[buf] = {
-    src = src,
-    ops = vim.tbl_extend('force', {}, ops),
-    baseline = vim.tbl_extend('force', {}, ops),
-    fields = {},
-  }
+  state[buf] = { src = src, ops = vim.tbl_extend('force', {}, ops), fields = {} }
   vim.api.nvim_create_autocmd('BufWipeout', {
     buffer = buf,
     callback = function()
       local st = state[buf]
       state[buf] = nil
+      if st and st.owns_tmpfile then
+        vim.fn.delete(st.src)
+      end
       if st and st.shell and vim.api.nvim_buf_is_valid(st.shell) then
         vim.cmd('bwipeout! ' .. st.shell)
       end
@@ -578,12 +590,26 @@ local function create_lens(src, ops, name_suffix)
 end
 
 --- Forks a lens's current pipeline into a brand-new, independent lens tab:
---- same source file, ops snapshotted at pin time. Neither tab affects the
---- other afterward -- reset/requery either one freely.
+--- materializes the FULL current result set (ignoring the row --limit) into
+--- a scratch temp file and opens a fresh lens over *that* file with an empty
+--- pipeline. The pinned tab's "raw data" already reflects whatever
+--- where/groupby/agg/etc it was pinned with, so any further query on it
+--- narrows within that fixed dataset -- neither tab affects the other.
 pin_lens = function(buf)
   local st = state[buf]
+  local out, ok = materialize(st)
+  if not ok then
+    vim.notify(table.concat(out, '\n'), vim.log.levels.ERROR, { title = 'csvlens' })
+    return 'csvlens: error running query (see :messages)'
+  end
+
+  local tmpfile = vim.fn.tempname() .. '.csv'
+  vim.fn.writefile(out, tmpfile)
+
   pin_seq = pin_seq + 1
-  local newbuf = create_lens(st.src, st.ops, '#pin' .. pin_seq)
+  local newbuf = create_lens(tmpfile, {}, '#pin' .. pin_seq, vim.fn.fnamemodify(st.src, ':t'))
+  state[newbuf].owns_tmpfile = true
+
   return ('pinned -> tab %d: %s'):format(vim.fn.tabpagenr(), vim.api.nvim_buf_get_name(newbuf))
 end
 

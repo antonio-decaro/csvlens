@@ -114,15 +114,31 @@ describe('csvlens', function()
     vim.api.nvim_set_current_tabpage(pinned_tab)
     eq({ 'cores,n,exec_ns_sum', '64,3,900' }, buf_lines())
 
-    -- mutating the PINNED lens afterward doesn't touch the original
+    -- mutating the PINNED lens afterward doesn't touch the original -- and
+    -- since the pin only ever contained cores==64 data, querying it for
+    -- cores==32 correctly matches nothing (no leaking back to the raw file)
     vim.cmd 'CsvWhere cores == 32'
-    eq({ 'cores,n,exec_ns_sum', '32,1,999' }, buf_lines())
+    eq({ 'cores,n,exec_ns_sum' }, buf_lines())
 
     vim.api.nvim_set_current_tabpage(orig_tab)
     eq({ 'cores,exec_ns', '64,100', '64,300', '64,500', '32,999' }, buf_lines())
   end)
 
-  it(':CsvReset on a pinned lens restores its baseline, not the raw file', function()
+  it('further :CsvWhere on a pinned tab narrows within the pinned dataset, not the raw file', function()
+    csvlens.open(csv_path)
+    vim.cmd 'CsvWhere cores == 64'
+    eq({ 'cores,exec_ns', '64,100', '64,300', '64,500' }, buf_lines())
+
+    vim.cmd 'CsvPin'
+    eq({ 'cores,exec_ns', '64,100', '64,300', '64,500' }, buf_lines())
+
+    -- a second :CsvWhere on the pinned tab narrows the already-pinned
+    -- (cores==64-only) rows -- it does not go back to the full original file
+    vim.cmd 'CsvWhere exec_ns > 200'
+    eq({ 'cores,exec_ns', '64,300', '64,500' }, buf_lines())
+  end)
+
+  it(':CsvReset on a pinned lens shows the full pinned dataset, not the raw file', function()
     csvlens.open(csv_path)
     vim.cmd 'CsvWhere cores == 64'
     vim.cmd 'CsvGroupBy cores'
@@ -132,10 +148,10 @@ describe('csvlens', function()
     vim.cmd 'CsvPin'
     -- mutate the pinned lens away from the pipeline it was pinned with
     vim.cmd 'CsvWhere cores == 32'
-    eq({ 'cores,n,exec_ns_sum', '32,1,999' }, buf_lines())
+    eq({ 'cores,n,exec_ns_sum' }, buf_lines())
 
     vim.cmd 'CsvReset'
-    -- back to the pipeline as it stood at pin time, not the raw, unfiltered CSV
+    -- back to the full pinned dataset, not the raw, unfiltered CSV
     eq({ 'cores,n,exec_ns_sum', '64,3,900' }, buf_lines())
   end)
 
