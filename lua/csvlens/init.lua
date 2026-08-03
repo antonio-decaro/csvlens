@@ -269,12 +269,26 @@ local SHELL_HELP = {
   '  pin                fork the current pipeline into a new, independent',
   '                     lens tab (same source, ops snapshotted)',
   '  reset              clear all operations',
-  '  close              close this shell window',
+  '  close              close this shell and its lens tab',
   'aliases: w/sort+s, group+g, a, c, l, o, r, sc, p, q, h/?',
   '<Tab> completes commands and column names, <Up>/<Down> recall history.',
 }
 
 local shells = {} -- shell bufnr -> { lens = lens_bufnr, history = {...}, hist_idx = nil, stash = nil }
+
+--- Closes the whole tab a lens (and its shell) live in -- used by the
+--- shell's close/q, so quitting the shell doesn't leave an orphaned lens tab
+--- behind. Falls back to just wiping the lens buffer if this is the last
+--- remaining tab (:tabclose refuses to close the very last one).
+local function close_lens_tab(lens)
+  local win = vim.fn.bufwinid(lens)
+  if win ~= -1 then
+    vim.api.nvim_set_current_tabpage(vim.api.nvim_win_get_tabpage(win))
+  end
+  if not pcall(vim.cmd, 'tabclose') and vim.api.nvim_buf_is_valid(lens) then
+    vim.cmd('bwipeout! ' .. lens)
+  end
+end
 
 local function shell_echo(shbuf, lines)
   if vim.api.nvim_buf_is_valid(shbuf) then
@@ -321,9 +335,7 @@ local function shell_dispatch(shbuf, lens, line)
     return
   elseif cmd == 'close' or cmd == 'q' then
     vim.schedule(function()
-      if vim.api.nvim_buf_is_valid(shbuf) then
-        vim.cmd('bwipeout! ' .. shbuf)
-      end
+      close_lens_tab(lens)
     end)
     return
   else
@@ -470,7 +482,9 @@ local function open_prompt_shell(lens)
   vim.keymap.set('i', '<Tab>', function()
     shell_complete(shbuf, lens)
   end, { buffer = shbuf })
-  vim.keymap.set('n', 'q', '<cmd>bwipeout!<CR>', { buffer = shbuf })
+  vim.keymap.set('n', 'q', function()
+    close_lens_tab(lens)
+  end, { buffer = shbuf })
 
   vim.api.nvim_create_autocmd('BufWipeout', {
     buffer = shbuf,
@@ -511,9 +525,7 @@ local function open_terminal_shell(lens)
   local script = plugin_root() .. '/scripts/csvlens_shell.py'
   vim.fn.termopen({ M.config.python, script, tostring(lens) }, {
     on_exit = vim.schedule_wrap(function()
-      if vim.api.nvim_buf_is_valid(shbuf) then
-        vim.cmd('bwipeout! ' .. shbuf)
-      end
+      close_lens_tab(lens)
     end),
   })
   -- termopen() names the buffer itself (term://...); reclaim a predictable
@@ -522,7 +534,9 @@ local function open_terminal_shell(lens)
   vim.bo[shbuf].bufhidden = 'wipe'
 
   vim.keymap.set('t', '<Esc>', [[<C-\><C-n>]], { buffer = shbuf })
-  vim.keymap.set('n', 'q', '<cmd>bwipeout!<CR>', { buffer = shbuf })
+  vim.keymap.set('n', 'q', function()
+    close_lens_tab(lens)
+  end, { buffer = shbuf })
 
   vim.api.nvim_create_autocmd('BufWipeout', {
     buffer = shbuf,

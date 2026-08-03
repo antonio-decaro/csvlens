@@ -185,7 +185,7 @@ class Shell(cmd.Cmd):
     do_r = do_reset
 
     def do_close(self, arg):
-        """close              close this shell window"""
+        """close              close this shell and its lens tab"""
         return True
 
     do_q = do_close

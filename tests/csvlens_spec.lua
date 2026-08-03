@@ -167,4 +167,22 @@ describe('csvlens', function()
     csvlens.open '/no/such/file.csv'
     eq(tabs_before, #vim.api.nvim_list_tabpages())
   end)
+
+  it('q in Normal mode on the shell closes the shell and its lens tab', function()
+    csvlens.setup { shell = true }
+    local tabs_before = #vim.api.nvim_list_tabpages()
+
+    csvlens.open(csv_path)
+    eq(tabs_before + 1, #vim.api.nvim_list_tabpages())
+
+    -- :CsvLens leaves focus in the shell's prompt buffer, in Insert mode
+    local shell_buf = vim.api.nvim_get_current_buf()
+    assert.matches('^csvlens://shell/', vim.api.nvim_buf_get_name(shell_buf))
+    vim.cmd 'stopinsert'
+
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('q', true, false, true), 'x', false)
+
+    eq(tabs_before, #vim.api.nvim_list_tabpages())
+    eq(false, vim.api.nvim_buf_is_valid(shell_buf))
+  end)
 end)

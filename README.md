@@ -121,8 +121,8 @@ Short aliases work too (`w`, `sort`/`s`, `group`/`g`, `a`, `c`, `l`, `o`, `sc`,
 `p`, `r`, `q`, `h`/`?`). `<Tab>` completes command names, column names (sourced from the
 lens's current result set), agg functions, and sort directions; `<Up>`/`<Down>`
 recall previous commands. `help` lists the full command set, `close` (or `q`
-in Normal mode) closes the shell without touching the lens. Closing the lens
-closes its shell too.
+in Normal mode) closes the shell *and* its lens tab. Closing the lens tab
+some other way (e.g. `:tabclose`) closes its shell too.
 
 ### Terminal backend
 
