@@ -41,7 +41,7 @@ M.config = {
   shell_backend = 'prompt', -- or 'terminal' (scripts/csvlens_shell.py, native readline editing)
 }
 
-local state = {} -- lens bufnr -> { src = path, ops = {...}, fields = {...}, shell = bufnr? }
+local state = {} -- lens bufnr -> { src = path, ops = {...}, baseline = {...}, fields = {...}, shell = bufnr? }
 
 local pin_seq = 0 -- disambiguates buffer names across repeated pins of the same lens
 local pin_lens -- assigned near create_lens/M.open below; forward-declared
@@ -136,8 +136,11 @@ local function apply_limit(buf, val)
   return refresh(buf)
 end
 
+--- Resets to the lens's baseline -- {} for a plain :CsvLens, or the ops
+--- snapshotted at :CsvPin time for a pinned tab, so resetting a pin returns
+--- to the view it was pinned with rather than the raw, unfiltered file.
 local function apply_reset(buf)
-  state[buf].ops = {}
+  state[buf].ops = vim.tbl_extend('force', {}, state[buf].baseline)
   return refresh(buf)
 end
 
@@ -543,7 +546,12 @@ local function create_lens(src, ops, name_suffix)
   vim.bo[buf].filetype = 'csv'
   vim.api.nvim_buf_set_name(buf, 'csvlens://' .. vim.fn.fnamemodify(src, ':t') .. (name_suffix or ''))
 
-  state[buf] = { src = src, ops = ops, fields = {} }
+  state[buf] = {
+    src = src,
+    ops = vim.tbl_extend('force', {}, ops),
+    baseline = vim.tbl_extend('force', {}, ops),
+    fields = {},
+  }
   vim.api.nvim_create_autocmd('BufWipeout', {
     buffer = buf,
     callback = function()
@@ -569,7 +577,7 @@ end
 pin_lens = function(buf)
   local st = state[buf]
   pin_seq = pin_seq + 1
-  local newbuf = create_lens(st.src, vim.tbl_extend('force', {}, st.ops), '#pin' .. pin_seq)
+  local newbuf = create_lens(st.src, st.ops, '#pin' .. pin_seq)
   return ('pinned -> tab %d: %s'):format(vim.fn.tabpagenr(), vim.api.nvim_buf_get_name(newbuf))
 end
 

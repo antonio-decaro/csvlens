@@ -110,6 +110,23 @@ describe('csvlens', function()
     eq({ 'cores,exec_ns', '64,100', '64,300', '64,500', '32,999' }, buf_lines())
   end)
 
+  it(':CsvReset on a pinned lens restores its baseline, not the raw file', function()
+    csvlens.open(csv_path)
+    vim.cmd 'CsvWhere cores == 64'
+    vim.cmd 'CsvGroupBy cores'
+    vim.cmd 'CsvAgg exec_ns:sum'
+    eq({ 'cores,n,exec_ns_sum', '64,3,900' }, buf_lines())
+
+    vim.cmd 'CsvPin'
+    -- mutate the pinned lens away from the pipeline it was pinned with
+    vim.cmd 'CsvWhere cores == 32'
+    eq({ 'cores,n,exec_ns_sum', '32,1,999' }, buf_lines())
+
+    vim.cmd 'CsvReset'
+    -- back to the pipeline as it stood at pin time, not the raw, unfiltered CSV
+    eq({ 'cores,n,exec_ns_sum', '64,3,900' }, buf_lines())
+  end)
+
   it('clears the pipeline with :CsvReset', function()
     csvlens.open(csv_path)
     vim.cmd 'CsvWhere cores == 64'
